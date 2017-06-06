@@ -1,5 +1,6 @@
 import inspect
 import threading
+from wsgiref.simple_server import make_server
 
 import six
 from webob import Request, Response
@@ -26,6 +27,7 @@ class Local(object):
             raise TypeError("No object has been registered")
 
 local_request = Local()
+local_app = Local()
 
 
 class HTTPRouter(object):
@@ -35,6 +37,7 @@ class HTTPRouter(object):
     def __init__(self, routes=()):
         self.routes = []
         self.named_routes = dict()
+        self.registry = {}
 
         for route in routes:
             self.add_route(route)
@@ -55,13 +58,14 @@ class HTTPRouter(object):
                       action=action, name=name)
         self.add_route(route)
 
+    def register(self, name, func):
+        self.registry[name] = func
+
     def add_route(self, route):
         if isinstance(route, BaseRoute):
             if route.name is not None:
-                if not self.named_routes.get(route.name):
-                    self.named_routes[route.name] = route
-                else:
-                    raise KeyError('named route is already registered')
+                # overwrites an existing named route
+                self.named_routes[route.name] = route.path
             self.routes.append(route)
 
     def get(self, path, handler, action=None, name=None):
@@ -108,7 +112,7 @@ class HTTPRouter(object):
     @staticmethod
     def adapt_handler(handler):
         if isinstance(handler, Handler):
-            # Handler classes instance must be initiated
+            # Handler instance must be initiated
             handler = handler()
         return handler
 
@@ -121,15 +125,24 @@ class HTTPRouter(object):
             error.serve_http(request, response)
 
 
+    def listen(self, host="", port=3000, message=None):
+        default_server_message = "Serving on port {}".format(port)
+        if not message:
+            message = default_server_message
+        httpd = make_server(host, port, self)
+        print(message)
+        httpd.serve_forever()
+
     def __call__(self, environ, start_response):
         request = self.request_class(environ)
         response = self.response_class()
         local_request.register(request)
+        local_app.register(self)
         self.dispatch(request, response)
         try:
             return response(environ, start_response)
         finally:
             local_request.unregister()
-
+            local_app.unregister()
 
 

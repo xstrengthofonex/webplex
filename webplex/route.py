@@ -34,7 +34,6 @@ class Route(BaseRoute):
         return False
 
 
-
 var_regex = re.compile(r'''
     \{             # The exact character "{"
     (\w+)          # The variable name {restricted to a-z, 0-9, _}

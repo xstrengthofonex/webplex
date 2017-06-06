@@ -1,4 +1,5 @@
 import unittest
+
 from webplex.route import Route, template_to_regex
 
 class TestRoute(unittest.TestCase):

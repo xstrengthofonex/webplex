@@ -1,4 +1,5 @@
 import six
+import inspect
 from abc import ABCMeta, abstractmethod
 
 from webplex import exceptions as exc
@@ -36,7 +37,11 @@ class Handler(BaseHandler):
 
 
 class HandlerFunc(BaseHandler):
+    """HandlerFunc is an adapter to allow the use of
+       functions as an HTTP handler. HandlerFunc(func)"""
     def __init__(self, func):
+        if not inspect.isfunction(func):
+            raise TypeError("func value must be a function")
         self.func = func
 
     def serve_http(self, request, response):

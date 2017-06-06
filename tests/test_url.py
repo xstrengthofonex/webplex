@@ -1,7 +1,9 @@
 import unittest
+from webob import Request
+
 from webplex.router import local_request
 from webplex.helpers import url
-from webob import Request
+
 
 class TestUrl(unittest.TestCase):
     def setUp(self):
