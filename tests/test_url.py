@@ -1,5 +1,6 @@
 import unittest
-from webplex.router import url, local_request
+from webplex.router import local_request
+from webplex.helpers import url
 from webob import Request
 
 class TestUrl(unittest.TestCase):

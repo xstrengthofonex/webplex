@@ -2,12 +2,13 @@ import re
 
 class Route(object):
     default_methods = ['GET']
-    def __init__(self, path, handler, methods=None, action=None):
+    def __init__(self, path, handler, methods=None, action=None, name=None):
         self.path = path
         self.handler = handler
         self.regex = re.compile(template_to_regex(path))
         self.urlvars = {}
         self.action = action
+        self.name = name
 
         if methods is None:
             self.methods = self.default_methods
@@ -23,6 +24,8 @@ class Route(object):
                 return True
         return False
 
+    def is_valid(self):
+        return True
 
 var_regex = re.compile(r'''
     \{             # The exact character "{"

@@ -1,14 +1,13 @@
 import inspect
-import sys
 import threading
-from string import Template
-from urllib.parse import urlencode
 
 import six
 from webob import Request, Response
 
 from webplex.route import Route
-
+from webplex import exceptions as exc
+from webplex.handlers import  BaseHandler, HandlerFunc, Handler
+from webplex.utils import load_from_string
 
 class Local(object):
     def __init__(self):
@@ -29,83 +28,38 @@ class Local(object):
 local_request = Local()
 
 
-class HTTPException(Exception):
-    pass
-
-class HTTPError(HTTPException):
-    def __init__(self, status_code, message):
-        super(HTTPError, self).__init__(message)
-        self.message = message
-        self.status_code = status_code
-
-    def serve_http(self, request, response):
-        response.status_int = self.status_code
-        response.write(self.message)
-
-class HTTPNotFound(HTTPError):
-    def __init__(self, message="404 Not Found", status_code=404):
-        super(HTTPNotFound, self).__init__(status_code, message)
-
-
-class HandlerFunc(object):
-    def __init__(self, func):
-        self.func = func
-
-    def serve_http(self, request, response):
-        return self.func(request, response)
-
-def render_string(string, **context):
-    template = Template(string)
-    return template.safe_substitute(**context)
-
-
-def render_template(filepath, **context):
-    with open(filepath, "r") as f:
-        contents = f.read()
-    return render_string(contents, **context)
-
-
-class Handler(object):
-    def __init__(self, request=None, response=None):
-        """request and response is set in serve_http"""
-        self.request = request
-        self.response = response
-
-    def serve_http(self, request, response):
-        self.request = request
-        self.response = response
-
-        action = self.request.route.action
-        if not action:
-            action = self.request.method.lower()
-        try:
-            method = getattr(self, action)
-        except AttributeError:
-            raise HTTPNotFound('No action for {}'.format(action))
-        return method(**request.urlvars)
-
-
 class HTTPRouter(object):
     request_class = Request
     response_class = Response
 
     def __init__(self):
         self.routes = []
+        self.named_routes = dict()
 
     def handle(self, methods, path, handler):
         if path[0] != "/":
-            raise HTTPException("path must begin with '/' in path")
+            raise exc.HTTPException("path must begin with '/'")
         if isinstance(handler, six.string_types):
             handler = load_from_string(handler)
         if inspect.isfunction(handler):
             handler = HandlerFunc(handler)
+        if not isinstance(handler, BaseHandler):
+            raise TypeError("handlers must be a subclass of BaseHandler")
         self.add_route(path, handler, methods)
 
 
-    def add_route(self, path, handler, methods=None, action=None):
-        """Adds a new route with a default GET method"""
-        route = Route(path, handler, methods, action)
-        self.routes.append(route)
+    def add_route(self, path, handler, methods=None, action=None, name=None):
+        """
+           Arguments are used to construct a new Route instance
+           If route is valid it is appended to the routes list
+           If route_name is given route is also added to named_routes list
+        """
+        route = Route(path=path, handler=handler, methods=methods,
+                      action=action, name=name)
+        if route.is_valid():
+            if route.name is not None:
+                self.named_routes[route.name] = route
+            self.routes.append(route)
 
     def get(self, path, handler):
         self.handle(["GET"], path, handler)
@@ -132,11 +86,11 @@ class HTTPRouter(object):
         for route in self.routes:
             if route.match(request):
                 return route.handler
-        raise HTTPNotFound()
+        raise exc.HTTPNotFound()
 
     @staticmethod
     def adapt_handler(handler):
-        if not isinstance(handler, HandlerFunc):
+        if isinstance(handler, Handler):
             handler = handler()
         return handler
 
@@ -145,7 +99,7 @@ class HTTPRouter(object):
             handler = self.match(request)
             adapted_handler = self.adapt_handler(handler)
             adapted_handler.serve_http(request, response)
-        except HTTPError as error:
+        except exc.HTTPError as error:
             error.serve_http(request, response)
 
 
@@ -159,19 +113,5 @@ class HTTPRouter(object):
         finally:
             local_request.unregister()
 
-def url(*segments, **vars):
-    base_url = local_request().application_url
-    path = '/'.join(str(s) for s in segments)
-    if not path.startswith('/'):
-        path = "/" + path
-    if vars:
-        path += "?" + urlencode(vars)
-    return base_url + path
 
 
-def load_from_string(string):
-    module_name, func_name = string.split(':', 1)
-    __import__(module_name)
-    module = sys.modules[module_name]
-    func = getattr(module, func_name)
-    return func
