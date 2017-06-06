@@ -4,7 +4,7 @@ import threading
 import six
 from webob import Request, Response
 
-from webplex.route import Route
+from webplex.route import Route, BaseRoute
 from webplex import exceptions as exc
 from webplex.handlers import  BaseHandler, HandlerFunc, Handler
 from webplex.utils import load_from_string
@@ -32,55 +32,72 @@ class HTTPRouter(object):
     request_class = Request
     response_class = Response
 
-    def __init__(self):
+    def __init__(self, routes=()):
         self.routes = []
         self.named_routes = dict()
 
-    def handle(self, methods, path, handler):
+        for route in routes:
+            self.add_route(route)
+
+    def handle(self, path, handler, methods=None, action=None, name=None):
         if path[0] != "/":
-            raise exc.HTTPException("path must begin with '/'")
+            # implicitly add a slash to the start of the path
+            path = "/" + path
         if isinstance(handler, six.string_types):
+            # load the handler from a string
             handler = load_from_string(handler)
         if inspect.isfunction(handler):
+            # use the HandlerFunc wrapper for function based handlers
             handler = HandlerFunc(handler)
         if not isinstance(handler, BaseHandler):
             raise TypeError("handlers must be a subclass of BaseHandler")
-        self.add_route(path, handler, methods)
-
-
-    def add_route(self, path, handler, methods=None, action=None, name=None):
-        """
-           Arguments are used to construct a new Route instance
-           If route is valid it is appended to the routes list
-           If route_name is given route is also added to named_routes list
-        """
         route = Route(path=path, handler=handler, methods=methods,
                       action=action, name=name)
-        if route.is_valid():
+        self.add_route(route)
+
+    def add_route(self, route):
+        if isinstance(route, BaseRoute):
             if route.name is not None:
-                self.named_routes[route.name] = route
+                if not self.named_routes.get(route.name):
+                    self.named_routes[route.name] = route
+                else:
+                    raise KeyError('named route is already registered')
             self.routes.append(route)
 
-    def get(self, path, handler):
-        self.handle(["GET"], path, handler)
+    def get(self, path, handler, action=None, name=None):
+        """Shortcut for GET handle"""
+        self.handle(path, handler, action=None,
+                    name=None, methods=['GET'])
 
-    def post(self, path, handler):
-        self.handle(["POST"], path, handler)
+    def post(self, path, handler, action=None, name=None):
+        """Shortcut for POST handle"""
+        self.handle(path, handler, action=None,
+                    name=None, methods=["POST"])
 
-    def head(self, path, handler):
-        self.handle(["HEAD"], path, handler)
+    def head(self, path, handler, action=None, name=None):
+        """Shortcut for HEAD handle"""
+        self.handle(path, handler,action=None,
+                    name=None, methods=["HEAD"])
 
-    def options(self, path, handler):
-        self.handle(["OPTIONS"], path, handler)
+    def options(self, path, handler, action=None, name=None):
+        """Shortcut for OPTIONS handle"""
+        self.handle(path, handler, action=None,
+                    name=None, methods=["OPTIONS"])
 
-    def put(self, path, handler):
-        self.handle(["PUT"], path, handler)
+    def put(self, path, handler, action=None, name=None):
+        """Shortcut for PUT handle"""
+        self.handle(path, handler, action=None,
+                    name=None, methods=["PUT"])
 
-    def patch(self, path, handler):
-        self.handle(["PATCH"], path, handler)
+    def patch(self, path, handler, action=None, name=None):
+        """Shortcut for PATCH handle"""
+        self.handle(path, handler, action=None,
+                    name=None, methods=["PUT"])
 
-    def delete(self, path, handler):
-        self.handle(["DELETE"], path, handler)
+    def delete(self, path, handler, action=None, name=None):
+        """Shortcut for DELETE handle"""
+        self.handle(path, handler, action=None,
+                    name=None, methods=["DELETE"])
 
     def match(self, request):
         for route in self.routes:
@@ -91,6 +108,7 @@ class HTTPRouter(object):
     @staticmethod
     def adapt_handler(handler):
         if isinstance(handler, Handler):
+            # Handler classes instance must be initiated
             handler = handler()
         return handler
 

@@ -1,6 +1,15 @@
 import re
+import six
+from abc import ABCMeta, abstractmethod
 
-class Route(object):
+@six.add_metaclass(ABCMeta)
+class BaseRoute(object):
+
+    @abstractmethod
+    def match(self, request):
+        pass
+
+class Route(BaseRoute):
     default_methods = ['GET']
     def __init__(self, path, handler, methods=None, action=None, name=None):
         self.path = path
@@ -24,8 +33,7 @@ class Route(object):
                 return True
         return False
 
-    def is_valid(self):
-        return True
+
 
 var_regex = re.compile(r'''
     \{             # The exact character "{"
